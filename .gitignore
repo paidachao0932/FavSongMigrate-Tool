@@ -4,3 +4,5 @@ dist/
 *.log
 .DS_Store
 Thumbs.db
+chi_sim.traineddata
+eng.traineddata
