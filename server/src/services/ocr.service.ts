@@ -3,27 +3,63 @@ import { logger } from '../utils/logger.js';
 import { isDuration, isMetadata } from '../utils/normalize.js';
 
 let worker: Worker | null = null;
+let workerLoading = false;
+let workerError: string | null = null;
+
+export function getOcrStatus(): { ready: boolean; loading: boolean; error: string | null } {
+  return {
+    ready: worker !== null,
+    loading: workerLoading,
+    error: workerError,
+  };
+}
 
 export async function initWorker(): Promise<Worker> {
   return getWorker();
 }
 
 async function getWorker(): Promise<Worker> {
-  if (!worker) {
-    logger.info('Initializing Tesseract.js worker (chi_sim+eng)...');
+  if (worker) return worker;
+
+  if (workerLoading) {
+    // Wait for in-progress initialization
+    for (let i = 0; i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      if (worker) return worker;
+      if (workerError) throw new Error(workerError);
+    }
+    throw new Error('OCR engine initialization timed out (60s). Please restart the server.');
+  }
+
+  workerLoading = true;
+  workerError = null;
+
+  try {
+    logger.info('Initializing Tesseract OCR engine (first time may download ~15MB)...');
     worker = await createWorker('chi_sim+eng', 1, {
       logger: (m) => {
-        if (m.status === 'loading tesseract core' || m.status === 'loading language traineddata') {
-          logger.debug(`OCR init: ${m.status} ${Math.round(m.progress * 100)}%`);
+        if (m.status === 'loading tesseract core') {
+          logger.info(`Downloading OCR core... ${Math.round(m.progress * 100)}%`);
+        } else if (m.status === 'loading language traineddata') {
+          logger.info(`Downloading Chinese language data... ${Math.round(m.progress * 100)}%`);
+        } else if (m.status === 'initializing api') {
+          logger.info('Starting OCR engine...');
         }
       },
     });
     await worker.setParameters({
       preserve_interword_spaces: '1',
     });
-    logger.info('Tesseract.js worker ready.');
+    logger.info('OCR engine ready!');
+    return worker;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    workerError = msg;
+    logger.error('OCR engine initialization failed: ' + msg);
+    throw err;
+  } finally {
+    workerLoading = false;
   }
-  return worker;
 }
 
 interface SongEntry {

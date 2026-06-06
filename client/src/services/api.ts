@@ -96,11 +96,16 @@ export async function ocrImages(
         const data = JSON.parse(xhr.responseText);
         resolve(data.songs);
       } else {
-        reject(new Error(`OCR request failed: ${xhr.status}`));
+        let serverMsg = '';
+        try {
+          const errData = JSON.parse(xhr.responseText);
+          serverMsg = errData.message || errData.error || '';
+        } catch {}
+        reject(new Error(serverMsg || `Server error (${xhr.status})`));
       }
     });
 
-    xhr.addEventListener('error', () => reject(new Error('Network error during OCR')));
+    xhr.addEventListener('error', () => reject(new Error('Cannot reach server. Is start.bat still running?')));
     xhr.open('POST', `${BASE}/ocr`);
     xhr.send(formData);
 
