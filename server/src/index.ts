@@ -13,6 +13,11 @@ import { logger } from './utils/logger.js';
 // Register platform adapters
 registerAdapter(new NeteaseAdapter());
 
+// Preload tesseract worker (downloads ~15MB language data on first run)
+import('./services/ocr.service.js')
+  .then(({ initWorker }) => initWorker())
+  .catch(() => logger.warn('Failed to preload OCR engine. It will load on first request.'));
+
 const app = express();
 
 // Middleware

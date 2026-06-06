@@ -2,6 +2,7 @@ import { Router } from 'express';
 import authRouter from './auth.routes.js';
 import searchRouter from './search.routes.js';
 import playlistRouter from './playlist.routes.js';
+import ocrRouter from './ocr.routes.js';
 import { listAdapters } from '../adapters/adapter-registry.js';
 
 const router = Router();
@@ -14,5 +15,6 @@ router.get('/platforms', (_req, res) => {
 router.use('/auth', authRouter);
 router.use('/search', searchRouter);
 router.use('/playlist', playlistRouter);
+router.use('/ocr', ocrRouter);
 
 export default router;

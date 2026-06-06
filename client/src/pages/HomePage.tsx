@@ -1,7 +1,7 @@
 import { useMigrationStore } from '../store/migrationStore';
 import { UploadZone } from '../components/upload/UploadZone';
 import { OCRProgress } from '../components/ocr/OCRProgress';
-import { runOCR } from '../services/ocrEngine';
+import { ocrImages } from '../services/api';
 import { useState } from 'react';
 
 export function HomePage() {
@@ -23,13 +23,17 @@ export function HomePage() {
     setError('');
     setOcrRunning(true);
     setOcrProgress(0);
-    setStatusText('Loading recognition engine...');
+    setStatusText('Uploading & recognizing...');
 
     try {
-      const songs = await runOCR(uploadedImages, (p) => {
+      const songs = await ocrImages(uploadedImages, (p) => {
         setOcrProgress(p);
-        if (p < 100) {
+        if (p < 50) {
+          setStatusText('Uploading images... ' + p + '%');
+        } else if (p < 95) {
           setStatusText('Recognizing text... ' + p + '%');
+        } else {
+          setStatusText('Done!');
         }
       });
       setRecognizedSongs(songs);
@@ -37,7 +41,7 @@ export function HomePage() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('OCR Error:', msg);
-      setError('OCR failed: ' + msg + '. Please ensure good network for first use (language data ~15MB download).');
+      setError('OCR failed: ' + msg);
     } finally {
       setOcrRunning(false);
     }

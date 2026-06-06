@@ -73,3 +73,49 @@ export async function getFavorites(
 ): Promise<{ favorites: { platformId: string; title: string; artist: string }[] }> {
   return request(`/playlist/${platform}/favorites?cookie=${encodeURIComponent(cookie)}`);
 }
+
+export async function ocrImages(
+  files: File[],
+  onProgress?: (p: number) => void
+): Promise<{ id: string; title: string; artist: string }[]> {
+  const formData = new FormData();
+  for (const f of files) {
+    formData.append('images', f);
+  }
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 30)); // upload = first 30%
+      }
+    });
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const data = JSON.parse(xhr.responseText);
+        resolve(data.songs);
+      } else {
+        reject(new Error(`OCR request failed: ${xhr.status}`));
+      }
+    });
+
+    xhr.addEventListener('error', () => reject(new Error('Network error during OCR')));
+    xhr.open('POST', `${BASE}/ocr`);
+    xhr.send(formData);
+
+    // Simulate progress after upload (server processing = 30-100%)
+    let simProgress = 30;
+    const simTimer = setInterval(() => {
+      if (simProgress < 90) {
+        simProgress += 5;
+        onProgress?.(simProgress);
+      }
+    }, 500);
+
+    xhr.addEventListener('loadend', () => {
+      clearInterval(simTimer);
+      onProgress?.(100);
+    });
+  });
+}
