@@ -15,23 +15,29 @@ export function HomePage() {
     setStep,
   } = useMigrationStore();
   const [statusText, setStatusText] = useState('');
+  const [error, setError] = useState('');
 
   const handleStartOCR = async () => {
     if (uploadedImages.length === 0) return;
 
+    setError('');
     setOcrRunning(true);
     setOcrProgress(0);
-    setStatusText('正在加载识别引擎...');
+    setStatusText('Loading recognition engine...');
 
     try {
       const songs = await runOCR(uploadedImages, (p) => {
         setOcrProgress(p);
-        setStatusText('正在识别图片文字...');
+        if (p < 100) {
+          setStatusText('Recognizing text... ' + p + '%');
+        }
       });
       setRecognizedSongs(songs);
       setStep('edit');
-    } catch (err) {
-      setStatusText('识别失败，请重试');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('OCR Error:', msg);
+      setError('OCR failed: ' + msg + '. Please ensure good network for first use (language data ~15MB download).');
     } finally {
       setOcrRunning(false);
     }
@@ -41,5 +47,20 @@ export function HomePage() {
     return <OCRProgress progress={ocrProgress} status={statusText} />;
   }
 
-  return <UploadZone onNext={handleStartOCR} />;
+  return (
+    <>
+      {error && (
+        <div className="max-w-md mx-auto mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm text-center">
+          {error}
+          <button
+            className="block mx-auto mt-2 text-xs text-red-300 underline"
+            onClick={() => setError('')}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+      <UploadZone onNext={handleStartOCR} />
+    </>
+  );
 }
