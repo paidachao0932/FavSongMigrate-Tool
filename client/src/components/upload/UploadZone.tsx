@@ -1,11 +1,11 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef } from 'react';
 import { useMigrationStore } from '../../store/migrationStore';
 import { Button } from '../shared/Button';
 
 export function UploadZone({ onNext }: { onNext: () => void }) {
   const { setUploadedImages, uploadedImages } = useMigrationStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [dragOver, setDragOver] = useState(false);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = useCallback(
     (files: FileList | null) => {
@@ -27,19 +27,20 @@ export function UploadZone({ onNext }: { onNext: () => void }) {
         对歌单页面长截图，支持多张图片
       </p>
 
-      {/* Drop zone */}
-      <div
-        className={`border-2 border-dashed rounded-2xl p-8 text-center transition-colors ${
-          dragOver ? 'border-indigo-400 bg-indigo-400/5' : 'border-white/10 hover:border-white/20'
-        }`}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
-        onClick={() => fileInputRef.current?.click()}
-      >
-        <div className="text-4xl mb-3">📸</div>
-        <p className="text-white/60 text-sm mb-1">点击选择图片或拖拽到此处</p>
-        <p className="text-white/20 text-xs">支持 JPG、PNG、长截图</p>
+      {/* Upload buttons */}
+      <div className="space-y-3">
+        <button
+          className="w-full py-4 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 font-medium active:scale-[0.98] transition-all"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          🖼️ 从相册选择
+        </button>
+        <button
+          className="w-full py-4 rounded-2xl bg-white/5 border border-white/10 text-white/60 font-medium active:scale-[0.98] transition-all"
+          onClick={() => cameraInputRef.current?.click()}
+        >
+          📷 拍照
+        </button>
       </div>
 
       <input
@@ -47,6 +48,13 @@ export function UploadZone({ onNext }: { onNext: () => void }) {
         type="file"
         accept="image/*"
         multiple
+        className="hidden"
+        onChange={(e) => handleFiles(e.target.files)}
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
         capture="environment"
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}
