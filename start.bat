@@ -1,43 +1,44 @@
 @echo off
-chcp 65001 >nul
-title 歌单迁移工具
+title FavSongMigrate Tool
 
 echo ========================================
-echo    歌单迁移工具
+echo    FavSongMigrate Tool
 echo ========================================
 echo.
 
 :: Check if dependencies installed
 if not exist "%~dp0server\node_modules" (
-    echo [提示] 首次运行需要安装依赖，正在启动安装...
+    echo [INFO] First run detected. Installing dependencies...
     call "%~dp0install.bat"
     if %ERRORLEVEL% NEQ 0 exit /b 1
 )
 
 if not exist "%~dp0client\node_modules" (
-    echo [提示] 首次运行需要安装依赖，正在启动安装...
+    echo [INFO] First run detected. Installing dependencies...
     call "%~dp0install.bat"
     if %ERRORLEVEL% NEQ 0 exit /b 1
 )
 
-echo [1/2] 构建前端...
+echo [1/2] Building frontend...
 cd /d "%~dp0client"
 call npx vite build
 if %ERRORLEVEL% NEQ 0 (
-    echo [错误] 前端构建失败
+    echo [ERROR] Frontend build failed.
     pause
     exit /b 1
 )
 
 echo.
-echo [2/2] 启动服务...
+echo [2/2] Starting server...
 cd /d "%~dp0server"
-start "" /b cmd /c "npx tsx src/index.ts"
+
+:: Start server in a new window so user can see its output
+start "FavSongMigrate Server" cmd /c "npx tsx src/index.ts"
 
 :: Wait for server to start
 timeout /t 3 /nobreak >nul
 
-:: Get local IP
+:: Get local IP for phone access
 for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4"') do (
     set LOCAL_IP=%%a
     set LOCAL_IP=!LOCAL_IP: =!
@@ -45,16 +46,16 @@ for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4"') do (
 
 echo.
 echo ========================================
-echo   启动成功！
+echo   Server is running!
 echo.
-echo   电脑浏览器打开: http://localhost:3001
+echo   PC browser:  http://localhost:3001
 echo.
-echo   👉 手机浏览器打开: http://!LOCAL_IP!:3001
-echo      (手机和电脑需在同一 WiFi 下)
+echo   Phone browser:  http://!LOCAL_IP!:3001
+echo   (Phone and PC must be on same WiFi)
 echo.
-echo   按任意键停止服务
+echo   Press any key in THIS window to stop.
 echo ========================================
 pause >nul
 
-:: Kill server
+:: Kill all node processes
 taskkill /f /im node.exe >nul 2>nul

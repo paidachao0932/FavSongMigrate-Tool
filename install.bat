@@ -1,21 +1,20 @@
 @echo off
-chcp 65001 >nul
-title 歌单迁移工具 - 安装依赖
+title FavSongMigrate - Install Dependencies
 
 echo ========================================
-echo    歌单迁移工具 - 安装依赖
+echo    FavSongMigrate Tool - Install
 echo ========================================
 echo.
 
 :: Check Node.js
 where node >nul 2>nul
 if %ERRORLEVEL% NEQ 0 (
-    echo [错误] 未检测到 Node.js，请先安装 Node.js
+    echo [ERROR] Node.js not found. Please install Node.js first.
     echo.
-    echo 正在打开 Node.js 下载页面...
-    start https://nodejs.org/zh-cn
+    echo Opening Node.js download page...
+    start https://nodejs.org/en
     echo.
-    echo 安装完成后，重新双击 install.bat 即可
+    echo After installation, double-click install.bat again.
     pause
     exit /b 1
 )
@@ -23,21 +22,21 @@ if %ERRORLEVEL% NEQ 0 (
 node -v
 echo.
 
-echo [1/2] 安装服务端依赖...
+echo [1/2] Installing server dependencies...
 cd /d "%~dp0server"
 call npm install
 if %ERRORLEVEL% NEQ 0 (
-    echo [错误] 服务端依赖安装失败
+    echo [ERROR] Server dependencies installation failed.
     pause
     exit /b 1
 )
 
 echo.
-echo [2/2] 安装客户端依赖...
+echo [2/2] Installing client dependencies...
 cd /d "%~dp0client"
 call npm install
 if %ERRORLEVEL% NEQ 0 (
-    echo [错误] 客户端依赖安装失败
+    echo [ERROR] Client dependencies installation failed.
     pause
     exit /b 1
 )
@@ -45,6 +44,7 @@ if %ERRORLEVEL% NEQ 0 (
 cd /d "%~dp0"
 echo.
 echo ========================================
-echo   安装完成！现在可以双击 start.bat 启动
+echo   Install complete!
+echo   Now double-click start.bat to launch.
 echo ========================================
 pause
