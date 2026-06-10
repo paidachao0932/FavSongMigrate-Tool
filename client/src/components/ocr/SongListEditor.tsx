@@ -7,7 +7,7 @@ interface SongListEditorProps {
 }
 
 export function SongListEditor({ onNext }: SongListEditorProps) {
-  const { recognizedSongs, setRecognizedSongs } = useMigrationStore();
+  const { recognizedSongs, setRecognizedSongs, uploadedUrls } = useMigrationStore();
 
   const updateSong = (id: string, field: 'title' | 'artist', value: string) => {
     setRecognizedSongs(
@@ -28,10 +28,26 @@ export function SongListEditor({ onNext }: SongListEditorProps) {
 
   return (
     <div className="max-w-md mx-auto py-4">
-      <h2 className="text-xl font-semibold mb-1 text-center">核对识别结果</h2>
-      <p className="text-white/40 text-sm text-center mb-4">
-        共识别 {recognizedSongs.length} 首，可编辑修正
+      <h2 className="text-xl font-semibold mb-1 text-center">输入歌单歌曲</h2>
+      <p className="text-white/40 text-sm text-center mb-2">
+        对照截图输入歌名和歌手，每行一首
       </p>
+
+      {/* Show uploaded images for reference */}
+      {uploadedUrls.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-3 mb-3">
+          {uploadedUrls.map((url, i) => (
+            <a key={i} href={url} target="_blank" rel="noreferrer">
+              <img
+                src={url}
+                alt={`Reference ${i + 1}`}
+                className="w-16 h-24 object-cover rounded-lg border border-white/10 flex-shrink-0"
+              />
+            </a>
+          ))}
+          <p className="text-white/20 text-[10px] self-end pb-1">点击放大</p>
+        </div>
+      )}
 
       <div className="space-y-2 mb-4 max-h-[50vh] overflow-y-auto">
         {recognizedSongs.map((song, idx) => (

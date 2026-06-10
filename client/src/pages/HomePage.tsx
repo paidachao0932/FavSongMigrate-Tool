@@ -1,7 +1,6 @@
 import { useMigrationStore } from '../store/migrationStore';
 import { UploadZone } from '../components/upload/UploadZone';
 import { OCRProgress } from '../components/ocr/OCRProgress';
-import { ocrImages } from '../services/api';
 import { useState } from 'react';
 
 export function HomePage() {
@@ -12,36 +11,54 @@ export function HomePage() {
     setOcrRunning,
     setOcrProgress,
     setRecognizedSongs,
+    setUploadedUrls,
     setStep,
   } = useMigrationStore();
   const [statusText, setStatusText] = useState('');
   const [error, setError] = useState('');
+  const [uploadedUrls, setUploadedUrlsLocal] = useState<string[]>([]);
 
-  const handleStartOCR = async () => {
+  const handleUploadAndNext = async () => {
     if (uploadedImages.length === 0) return;
 
     setError('');
     setOcrRunning(true);
     setOcrProgress(0);
-    setStatusText('Uploading & recognizing...');
+    setStatusText('Uploading images...');
 
     try {
-      const songs = await ocrImages(uploadedImages, (p) => {
-        setOcrProgress(p);
-        if (p < 50) {
-          setStatusText('Uploading images... ' + p + '%');
-        } else if (p < 95) {
-          setStatusText('Recognizing text... ' + p + '%');
-        } else {
-          setStatusText('Done!');
-        }
+      const formData = new FormData();
+      for (const f of uploadedImages) {
+        formData.append('images', f);
+      }
+
+      const xhr = new XMLHttpRequest();
+      const result: { urls: string[] } = await new Promise((resolve, reject) => {
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            setOcrProgress(Math.round((e.loaded / e.total) * 100));
+          }
+        });
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(JSON.parse(xhr.responseText));
+          } else {
+            reject(new Error(`Upload failed (${xhr.status})`));
+          }
+        });
+        xhr.addEventListener('error', () => reject(new Error('Cannot reach server. Is start.bat running?')));
+        xhr.open('POST', '/api/ocr');
+        xhr.send(formData);
       });
-      setRecognizedSongs(songs);
+
+      setUploadedUrls(result.urls); // store
+      setUploadedUrlsLocal(result.urls); // local
+      // Initialize empty song list — user fills in manually
+      setRecognizedSongs([]);
       setStep('edit');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error('OCR Error:', msg);
-      setError('OCR failed: ' + msg);
+      setError('Upload failed: ' + msg);
     } finally {
       setOcrRunning(false);
     }
@@ -64,7 +81,7 @@ export function HomePage() {
           </button>
         </div>
       )}
-      <UploadZone onNext={handleStartOCR} />
+      <UploadZone onNext={handleUploadAndNext} uploadedUrls={uploadedUrls} />
     </>
   );
 }

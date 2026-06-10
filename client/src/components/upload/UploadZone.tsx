@@ -74,7 +74,7 @@ export function UploadZone({ onNext }: { onNext: () => void }) {
               />
             ))}
           </div>
-          <Button size="lg" onClick={onNext}>开始识别</Button>
+          <Button size="lg" onClick={onNext}>下一步 →</Button>
         </div>
       )}
     </div>

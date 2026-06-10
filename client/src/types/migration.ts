@@ -9,6 +9,7 @@ export interface MigrationState {
   // Upload
   uploadedImages: File[];
   previewUrls: string[];
+  uploadedUrls: string[];
 
   // OCR
   isOcrRunning: boolean;
@@ -33,6 +34,7 @@ export interface MigrationState {
   // Actions
   setStep: (step: MigrationStep) => void;
   setUploadedImages: (files: File[]) => void;
+  setUploadedUrls: (urls: string[]) => void;
   setOcrRunning: (running: boolean) => void;
   setOcrProgress: (progress: number) => void;
   setRecognizedSongs: (songs: RecognizedSong[]) => void;

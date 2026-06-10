@@ -24,11 +24,6 @@ process.on('unhandledRejection', (reason) => {
 // Register platform adapters
 registerAdapter(new NeteaseAdapter());
 
-// Preload tesseract worker (downloads ~15MB language data on first run)
-import('./services/ocr.service.js')
-  .then(({ initWorker }) => initWorker())
-  .catch((err) => logger.warn('Failed to preload OCR engine: ' + err.message));
-
 const app = express();
 
 // Middleware

@@ -5,6 +5,7 @@ const initialState: Omit<MigrationState, 'setStep' | 'setUploadedImages' | 'setO
   step: 'upload',
   uploadedImages: [],
   previewUrls: [],
+  uploadedUrls: [],
   isOcrRunning: false,
   ocrProgress: 0,
   recognizedSongs: [],
@@ -29,6 +30,8 @@ export const useMigrationStore = create<MigrationState>((set) => ({
       uploadedImages: files,
       previewUrls: files.map((f) => URL.createObjectURL(f)),
     }),
+
+  setUploadedUrls: (urls) => set({ uploadedUrls: urls }),
 
   setOcrRunning: (running) => set({ isOcrRunning: running }),
   setOcrProgress: (progress) => set({ ocrProgress: progress }),
