@@ -1,4 +1,5 @@
 import { createWorker, type Worker } from 'tesseract.js';
+import sharp from 'sharp';
 import { logger } from '../utils/logger.js';
 import { isDuration, isMetadata } from '../utils/normalize.js';
 
@@ -75,13 +76,31 @@ export async function ocrImages(files: Express.Multer.File[]): Promise<SongEntry
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-    logger.info(`OCR processing image ${i + 1}/${files.length}: ${file.originalname}`);
+    logger.info(`OCR processing image ${i + 1}/${files.length}: ${file.originalname} (${(file.size / 1024).toFixed(0)}KB)`);
 
-    const { data } = await w.recognize(file.buffer);
-    const songs = parseOcrText(data.text);
+    // Preprocess: resize to max 1500px, grayscale, output as PNG buffer
+    let processedBuffer: Buffer;
+    try {
+      processedBuffer = await sharp(file.buffer)
+        .resize(1500, 1500, { fit: 'inside', withoutEnlargement: true })
+        .grayscale()
+        .normalize()
+        .png()
+        .toBuffer();
+      logger.info(`Image preprocessed: ${(file.size / 1024).toFixed(0)}KB -> ${(processedBuffer.length / 1024).toFixed(0)}KB`);
+    } catch (preErr) {
+      logger.warn(`Image preprocessing failed, using original: ${preErr}`);
+      processedBuffer = file.buffer;
+    }
 
-    for (const s of songs) {
-      allSongs.push({ id: `song-${allSongs.length}`, ...s });
+    try {
+      const { data } = await w.recognize(processedBuffer);
+      const songs = parseOcrText(data.text);
+      for (const s of songs) {
+        allSongs.push({ id: `song-${allSongs.length}`, ...s });
+      }
+    } catch (ocrErr) {
+      logger.error(`OCR recognize failed for image ${i + 1}: ${ocrErr}`);
     }
   }
 

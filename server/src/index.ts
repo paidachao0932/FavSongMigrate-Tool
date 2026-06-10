@@ -10,6 +10,17 @@ import { registerAdapter } from './adapters/adapter-registry.js';
 import { NeteaseAdapter } from './adapters/netease/netease.adapter.js';
 import { logger } from './utils/logger.js';
 
+// Prevent process from crashing on unhandled errors
+process.on('uncaughtException', (err) => {
+  logger.error('UNCAUGHT EXCEPTION: ' + err.message);
+  console.error(err.stack);
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.error('UNHANDLED REJECTION: ' + String(reason));
+  console.error(reason);
+});
+
 // Register platform adapters
 registerAdapter(new NeteaseAdapter());
 
