@@ -23,7 +23,6 @@ async function getWorker(): Promise<Worker> {
   if (worker) return worker;
 
   if (workerLoading) {
-    // Wait for in-progress initialization
     for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 1000));
       if (worker) return worker;
@@ -37,20 +36,28 @@ async function getWorker(): Promise<Worker> {
 
   try {
     logger.info('Initializing Tesseract OCR engine (first time may download ~15MB)...');
-    worker = await createWorker('chi_sim+eng', 1, {
+
+    // tesseract.js v4 API
+    worker = await createWorker({
       logger: (m) => {
         if (m.status === 'loading tesseract core') {
           logger.info(`Downloading OCR core... ${Math.round(m.progress * 100)}%`);
         } else if (m.status === 'loading language traineddata') {
-          logger.info(`Downloading Chinese language data... ${Math.round(m.progress * 100)}%`);
-        } else if (m.status === 'initializing api') {
+          logger.info(`Downloading language data... ${Math.round(m.progress * 100)}%`);
+        } else if (m.status === 'initializing api' || m.status === 'initializing tesseract') {
           logger.info('Starting OCR engine...');
         }
       },
     });
+
+    logger.info('Loading language: chi_sim...');
+    await worker.loadLanguage('chi_sim+eng');
+    logger.info('Initializing...');
+    await worker.initialize('chi_sim+eng');
     await worker.setParameters({
       preserve_interword_spaces: '1',
     });
+
     logger.info('OCR engine ready!');
     return worker;
   } catch (err) {
