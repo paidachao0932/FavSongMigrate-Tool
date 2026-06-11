@@ -1,37 +1,42 @@
 /**
- * Standalone OCR worker that runs in a child process.
- * If tesseract.js WASM crashes, it only kills this worker, not the main server.
+ * Standalone OCR worker — runs in an isolated child process.
+ * Uses tesseract.js v5 with local traineddata (pre-downloaded by install.bat).
+ * Falls back to CDN download if local files are missing.
  */
 import { createWorker } from 'tesseract.js';
 import sharp from 'sharp';
 import fs from 'fs';
+import path from 'path';
 
 interface OcrRequest {
   imagePath: string;
   id: number;
 }
 
-interface OcrResponse {
-  id: number;
-  texts: string[];
-  error?: string;
-}
-
 let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
 
 async function getWorker() {
   if (!worker) {
-    process.send?.({ type: 'log', message: 'Loading OCR engine...' });
-    worker = await createWorker({
+    const tessdataPath = path.resolve('tessdata');
+    const hasLocalData = fs.existsSync(path.join(tessdataPath, 'chi_sim.traineddata'));
+
+    process.send?.({ type: 'log', message: hasLocalData
+      ? 'Loading OCR engine (local language data)...'
+      : 'Downloading OCR language data (this may take a while)...'
+    });
+
+    worker = await createWorker('chi_sim+eng', 1, {
+      langPath: hasLocalData ? tessdataPath : undefined,
       logger: (m) => {
-        if (m.status === 'loading language traineddata') {
+        if (m.status === 'loading language traineddata' && m.progress) {
           process.send?.({ type: 'progress', status: m.status, progress: m.progress });
+        }
+        if (m.status === 'initializing api') {
+          process.send?.({ type: 'log', message: 'Starting OCR engine...' });
         }
       },
     });
-    await worker.loadLanguage('chi_sim+eng');
-    await worker.initialize('chi_sim+eng');
-    await worker.setParameters({ preserve_interword_spaces: '1' });
+
     process.send?.({ type: 'log', message: 'OCR engine ready' });
   }
   return worker;
@@ -41,11 +46,11 @@ process.on('message', async (req: OcrRequest) => {
   try {
     const w = await getWorker();
 
-    // Read and aggressively resize image
+    // Read and resize image to reduce memory pressure
     let buffer = fs.readFileSync(req.imagePath);
     try {
       buffer = await sharp(buffer)
-        .resize(1000, 1000, { fit: 'inside', withoutEnlargement: true })
+        .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
         .grayscale()
         .normalize()
         .png()
@@ -56,17 +61,14 @@ process.on('message', async (req: OcrRequest) => {
 
     const { data } = await w.recognize(buffer);
 
-    const resp: OcrResponse = { id: req.id, texts: data.text.split('\n') };
-    process.send?.({ type: 'result', ...resp });
+    process.send?.({ type: 'result', id: req.id, texts: data.text.split('\n') });
 
     // Clean up temp file
     fs.unlink(req.imagePath, () => {});
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    const resp: OcrResponse = { id: req.id, texts: [], error: msg };
-    process.send?.({ type: 'result', ...resp });
-    // Clean up temp file
-    fs.unlink(req.imagePath, () => {});
+    process.send?.({ type: 'result', id: req.id, texts: [], error: msg });
+    try { fs.unlink(req.imagePath, () => {}); } catch {}
   }
 });
 
