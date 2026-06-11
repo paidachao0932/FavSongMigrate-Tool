@@ -10,6 +10,11 @@ let workerReady = false;
 let pendingRequests = new Map<number, { resolve: (texts: string[]) => void; reject: (err: Error) => void }>();
 let reqId = 0;
 
+export function preloadWorker(): void {
+  logger.info('Preloading OCR worker...');
+  getWorker();
+}
+
 function getWorkerPath(): string {
   return path.resolve(import.meta.dirname, 'ocr-worker.ts');
 }

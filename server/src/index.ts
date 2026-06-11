@@ -24,6 +24,11 @@ process.on('unhandledRejection', (reason) => {
 // Register platform adapters
 registerAdapter(new NeteaseAdapter());
 
+// Preload OCR worker on startup
+setTimeout(() => {
+  import('./services/ocr.service.js').then(({ preloadWorker }) => preloadWorker());
+}, 1000);
+
 const app = express();
 
 // Middleware
