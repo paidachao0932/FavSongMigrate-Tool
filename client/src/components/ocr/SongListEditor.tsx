@@ -7,7 +7,7 @@ interface SongListEditorProps {
 }
 
 export function SongListEditor({ onNext }: SongListEditorProps) {
-  const { recognizedSongs, setRecognizedSongs, uploadedUrls } = useMigrationStore();
+  const { recognizedSongs, setRecognizedSongs } = useMigrationStore();
 
   const updateSong = (id: string, field: 'title' | 'artist', value: string) => {
     setRecognizedSongs(
@@ -28,28 +28,12 @@ export function SongListEditor({ onNext }: SongListEditorProps) {
 
   return (
     <div className="max-w-md mx-auto py-4">
-      <h2 className="text-xl font-semibold mb-1 text-center">输入歌单歌曲</h2>
-      <p className="text-white/40 text-sm text-center mb-2">
-        对照截图输入歌名和歌手，每行一首
+      <h2 className="text-xl font-semibold mb-1 text-center">核对识别结果</h2>
+      <p className="text-white/40 text-sm text-center mb-4">
+        已识别 {recognizedSongs.length} 首，可编辑修正或补充
       </p>
 
-      {/* Show uploaded images for reference */}
-      {uploadedUrls.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto pb-3 mb-3">
-          {uploadedUrls.map((url, i) => (
-            <a key={i} href={url} target="_blank" rel="noreferrer">
-              <img
-                src={url}
-                alt={`Reference ${i + 1}`}
-                className="w-16 h-24 object-cover rounded-lg border border-white/10 flex-shrink-0"
-              />
-            </a>
-          ))}
-          <p className="text-white/20 text-[10px] self-end pb-1">点击放大</p>
-        </div>
-      )}
-
-      <div className="space-y-2 mb-4 max-h-[50vh] overflow-y-auto">
+      <div className="space-y-2 mb-4 max-h-[55vh] overflow-y-auto">
         {recognizedSongs.map((song, idx) => (
           <SongRow
             key={song.id}
@@ -61,17 +45,15 @@ export function SongListEditor({ onNext }: SongListEditorProps) {
         ))}
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 mb-4">
         <Button variant="ghost" size="sm" onClick={addBlank}>
           + 添加歌曲
         </Button>
       </div>
 
-      <div className="mt-4">
-        <Button size="lg" onClick={onNext} disabled={recognizedSongs.length === 0}>
-          确认，下一步
-        </Button>
-      </div>
+      <Button size="lg" onClick={onNext} disabled={recognizedSongs.length === 0}>
+        确认，下一步
+      </Button>
     </div>
   );
 }

@@ -11,20 +11,18 @@ export function HomePage() {
     setOcrRunning,
     setOcrProgress,
     setRecognizedSongs,
-    setUploadedUrls,
     setStep,
   } = useMigrationStore();
   const [statusText, setStatusText] = useState('');
   const [error, setError] = useState('');
-  const [uploadedUrls, setUploadedUrlsLocal] = useState<string[]>([]);
 
-  const handleUploadAndNext = async () => {
+  const handleStartOCR = async () => {
     if (uploadedImages.length === 0) return;
 
     setError('');
     setOcrRunning(true);
     setOcrProgress(0);
-    setStatusText('Uploading images...');
+    setStatusText('Uploading...');
 
     try {
       const formData = new FormData();
@@ -32,33 +30,37 @@ export function HomePage() {
         formData.append('images', f);
       }
 
-      const xhr = new XMLHttpRequest();
-      const result: { urls: string[] } = await new Promise((resolve, reject) => {
+      const result: { songs: { id: string; title: string; artist: string }[] } = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+
         xhr.upload.addEventListener('progress', (e) => {
           if (e.lengthComputable) {
-            setOcrProgress(Math.round((e.loaded / e.total) * 100));
+            setOcrProgress(Math.round((e.loaded / e.total) * 20));
           }
         });
+
         xhr.addEventListener('load', () => {
           if (xhr.status >= 200 && xhr.status < 300) {
             resolve(JSON.parse(xhr.responseText));
           } else {
-            reject(new Error(`Upload failed (${xhr.status})`));
+            let serverMsg = '';
+            try { serverMsg = JSON.parse(xhr.responseText).message || ''; } catch {}
+            reject(new Error(serverMsg || `Server error (${xhr.status})`));
           }
         });
+
         xhr.addEventListener('error', () => reject(new Error('Cannot reach server. Is start.bat running?')));
+
         xhr.open('POST', '/api/ocr');
         xhr.send(formData);
       });
 
-      setUploadedUrls(result.urls); // store
-      setUploadedUrlsLocal(result.urls); // local
-      // Initialize empty song list — user fills in manually
-      setRecognizedSongs([]);
+      setRecognizedSongs(result.songs);
       setStep('edit');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      setError('Upload failed: ' + msg);
+      console.error('OCR Error:', msg);
+      setError('OCR failed: ' + msg);
     } finally {
       setOcrRunning(false);
     }
@@ -73,15 +75,12 @@ export function HomePage() {
       {error && (
         <div className="max-w-md mx-auto mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm text-center">
           {error}
-          <button
-            className="block mx-auto mt-2 text-xs text-red-300 underline"
-            onClick={() => setError('')}
-          >
+          <button className="block mx-auto mt-2 text-xs text-red-300 underline" onClick={() => setError('')}>
             Dismiss
           </button>
         </div>
       )}
-      <UploadZone onNext={handleUploadAndNext} uploadedUrls={uploadedUrls} />
+      <UploadZone onNext={handleStartOCR} />
     </>
   );
 }

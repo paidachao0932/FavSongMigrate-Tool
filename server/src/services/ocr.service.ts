@@ -1,73 +1,98 @@
-import { createWorker, type Worker } from 'tesseract.js';
-import sharp from 'sharp';
+import { fork, type ChildProcess } from 'child_process';
+import path from 'path';
+import fs from 'fs';
+import os from 'os';
 import { logger } from '../utils/logger.js';
 import { isDuration, isMetadata } from '../utils/normalize.js';
 
-let worker: Worker | null = null;
-let workerLoading = false;
-let workerError: string | null = null;
+let workerProcess: ChildProcess | null = null;
+let workerReady = false;
+let pendingRequests = new Map<number, { resolve: (texts: string[]) => void; reject: (err: Error) => void }>();
+let reqId = 0;
 
-export function getOcrStatus(): { ready: boolean; loading: boolean; error: string | null } {
-  return {
-    ready: worker !== null,
-    loading: workerLoading,
-    error: workerError,
-  };
+function getWorkerPath(): string {
+  return path.resolve(import.meta.dirname, 'ocr-worker.ts');
 }
 
-export async function initWorker(): Promise<Worker> {
-  return getWorker();
-}
+function getWorker(): ChildProcess {
+  if (workerProcess && workerProcess.connected) return workerProcess;
 
-async function getWorker(): Promise<Worker> {
-  if (worker) return worker;
+  workerReady = false;
 
-  if (workerLoading) {
-    for (let i = 0; i < 60; i++) {
-      await new Promise((r) => setTimeout(r, 1000));
-      if (worker) return worker;
-      if (workerError) throw new Error(workerError);
-    }
-    throw new Error('OCR engine initialization timed out (60s). Please restart the server.');
+  // Kill old worker if exists
+  if (workerProcess) {
+    workerProcess.kill();
   }
 
-  workerLoading = true;
-  workerError = null;
+  const workerPath = getWorkerPath();
+  logger.info('Starting OCR worker process...');
 
-  try {
-    logger.info('Initializing Tesseract OCR engine (first time may download ~15MB)...');
+  workerProcess = fork(workerPath, [], {
+    execArgv: ['--import', 'tsx'],
+    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+  });
 
-    // tesseract.js v4 API
-    worker = await createWorker({
-      logger: (m) => {
-        if (m.status === 'loading tesseract core') {
-          logger.info(`Downloading OCR core... ${Math.round(m.progress * 100)}%`);
-        } else if (m.status === 'loading language traineddata') {
-          logger.info(`Downloading language data... ${Math.round(m.progress * 100)}%`);
-        } else if (m.status === 'initializing api' || m.status === 'initializing tesseract') {
-          logger.info('Starting OCR engine...');
+  workerProcess.on('message', (msg: any) => {
+    if (msg.type === 'ready') {
+      workerReady = true;
+      logger.info('OCR worker ready');
+    } else if (msg.type === 'log') {
+      logger.info('OCR worker: ' + msg.message);
+    } else if (msg.type === 'progress') {
+      logger.info(`OCR worker: ${msg.status} ${Math.round(msg.progress * 100)}%`);
+    } else if (msg.type === 'result') {
+      const pending = pendingRequests.get(msg.id);
+      if (pending) {
+        pendingRequests.delete(msg.id);
+        if (msg.error) {
+          pending.reject(new Error(msg.error));
+        } else {
+          pending.resolve(msg.texts || []);
         }
-      },
-    });
+      }
+    }
+  });
 
-    logger.info('Loading language: chi_sim...');
-    await worker.loadLanguage('chi_sim+eng');
-    logger.info('Initializing...');
-    await worker.initialize('chi_sim+eng');
-    await worker.setParameters({
-      preserve_interword_spaces: '1',
-    });
+  workerProcess.on('exit', (code, signal) => {
+    logger.warn(`OCR worker exited (code=${code}, signal=${signal})`);
+    workerReady = false;
+    workerProcess = null;
 
-    logger.info('OCR engine ready!');
-    return worker;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    workerError = msg;
-    logger.error('OCR engine initialization failed: ' + msg);
-    throw err;
-  } finally {
-    workerLoading = false;
-  }
+    // Reject all pending requests
+    for (const [id, { reject }] of pendingRequests) {
+      pendingRequests.delete(id);
+      reject(new Error('OCR worker crashed. Please try again.'));
+    }
+  });
+
+  // Wait for worker to be ready
+  return workerProcess;
+}
+
+function recognizeImage(imagePath: string): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const worker = getWorker();
+    const id = ++reqId;
+
+    pendingRequests.set(id, { resolve, reject });
+
+    const sendRequest = () => {
+      if (workerReady) {
+        worker.send({ imagePath, id });
+      } else {
+        setTimeout(sendRequest, 200);
+      }
+    };
+    sendRequest();
+
+    // Timeout after 120s
+    setTimeout(() => {
+      if (pendingRequests.has(id)) {
+        pendingRequests.delete(id);
+        reject(new Error('OCR recognition timed out after 120 seconds'));
+      }
+    }, 120000);
+  });
 }
 
 interface SongEntry {
@@ -77,47 +102,37 @@ interface SongEntry {
 }
 
 export async function ocrImages(files: Express.Multer.File[]): Promise<SongEntry[]> {
-  const w = await getWorker();
-
   const allSongs: SongEntry[] = [];
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     logger.info(`OCR processing image ${i + 1}/${files.length}: ${file.originalname} (${(file.size / 1024).toFixed(0)}KB)`);
 
-    // Preprocess: resize to max 1500px, grayscale, output as PNG buffer
-    let processedBuffer: Buffer;
-    try {
-      processedBuffer = await sharp(file.buffer)
-        .resize(1500, 1500, { fit: 'inside', withoutEnlargement: true })
-        .grayscale()
-        .normalize()
-        .png()
-        .toBuffer();
-      logger.info(`Image preprocessed: ${(file.size / 1024).toFixed(0)}KB -> ${(processedBuffer.length / 1024).toFixed(0)}KB`);
-    } catch (preErr) {
-      logger.warn(`Image preprocessing failed, using original: ${preErr}`);
-      processedBuffer = file.buffer;
-    }
+    // Write to temp file (worker needs file path)
+    const tmpDir = os.tmpdir();
+    const tmpPath = path.join(tmpDir, `ocr-${Date.now()}-${i}.png`);
+    fs.writeFileSync(tmpPath, file.buffer);
 
     try {
-      const { data } = await w.recognize(processedBuffer);
-      const songs = parseOcrText(data.text);
+      const lines = await recognizeImage(tmpPath);
+      const songs = parseOcrLines(lines);
       for (const s of songs) {
         allSongs.push({ id: `song-${allSongs.length}`, ...s });
       }
-    } catch (ocrErr) {
-      logger.error(`OCR recognize failed for image ${i + 1}: ${ocrErr}`);
+      logger.info(`Image ${i + 1}: recognized ${songs.length} songs`);
+    } catch (err) {
+      logger.error(`OCR failed for image ${i + 1}: ${err}`);
+      // Clean up temp file on error
+      try { fs.unlinkSync(tmpPath); } catch {}
     }
   }
 
-  logger.info(`OCR complete: ${allSongs.length} songs recognized`);
+  logger.info(`OCR complete: ${allSongs.length} total songs`);
   return allSongs;
 }
 
-function parseOcrText(raw: string): { title: string; artist: string }[] {
-  const lines = raw
-    .split('\n')
+function parseOcrLines(lines: string[]): { title: string; artist: string }[] {
+  const cleaned = lines
     .map((l) => l.trim())
     .filter((l) => l.length > 0 && !isDuration(l) && !isMetadata(l));
 
@@ -127,7 +142,7 @@ function parseOcrText(raw: string): { title: string; artist: string }[] {
   const dashLine = /^(.{1,80})\s*[-–—]\s*(.{1,50})$/;
   const remaining: string[] = [];
 
-  for (const line of lines) {
+  for (const line of cleaned) {
     const m = line.match(dashLine);
     if (m) {
       songs.push({ title: m[1].trim(), artist: m[2].trim() });
@@ -136,12 +151,12 @@ function parseOcrText(raw: string): { title: string; artist: string }[] {
     }
   }
 
-  // Strategy 2: pair lines (every 2 lines = title + artist)
+  // Strategy 2: pair lines
   const paired: string[] = [];
   for (const line of remaining) {
     if (
-      /^(播放|收藏|下载|分享|歌曲|歌手|专辑|时长|全部播放|随机播放|单曲循环)/.test(line) ||
-      /^(歌单|列表|音乐|排行榜|推荐|热门|最新)/.test(line) ||
+      /^(播放|收藏|下载|分享|歌曲|歌手|专辑|时长|全部|随机|单曲|循环)/.test(line) ||
+      /^(歌单|列表|音乐|排行|推荐|热门|最新|我的|喜欢)/.test(line) ||
       /^\d+首/.test(line)
     ) {
       continue;
